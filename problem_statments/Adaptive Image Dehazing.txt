@@ -1,0 +1,25 @@
+TITLE:			Adaptive Image Dehazing for Real-Time Object Detection in Foggy Environments Using Deep Learning.
+
+PROBLEM STATEMENT:	Modern object detection models suffer to detect with foggy images. Applying dehazing as a preprocessing step will increase computational cost and the results might not be accurate. So an adaptive dehazing model should be used. The model should be able to predict amount of dehazing needed to be performed.
+
+ARCHITECTURE: 		Input is an image(real-time). Detect how much haze the image is having(no haze, medium haze, high haze). If haze is detected, dehaze accordingly and pass the output of the dehazing model to YOLO model(Object detection model). Final object detected is output.
+
+MOTIVATION:		Blind dehazing will affect output. Adaptive dehazing should be used. 
+
+
+“Object detection models suffer significant performance degradation in foggy or hazy environments due to reduced visibility and contrast. Existing approaches apply image dehazing as a preprocessing step uniformly, which increases computational cost and does not always improve detection accuracy. This project proposes an adaptive pipeline that dynamically applies dehazing based on haze severity to optimize both detection performance and real-time efficiency.”
+
+
+-> Compare Adaptive vs Always-dehaze
+-> Measure fps (novelty)
+
+
+three ways:
+1. The performance angle:
+			Make the frames count more for high resolution images. Optimize classification.
+2. The intelligence angle:
+			Focus on adaptivity. Make model more adaptive.
+3. Hardware angle:
+		Test running on low configuration devices like phone processor, jeston nano.
+
+

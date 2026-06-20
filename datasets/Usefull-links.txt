@@ -1,0 +1,1 @@
+This link is a writeup in kaggle that specifies datasets for dehazing -> https://www.kaggle.com/writeups/marykabrown/top-5-image-dehazing-datasets-for-researchers

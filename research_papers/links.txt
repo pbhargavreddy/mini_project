@@ -11,3 +11,10 @@ I. Adaptive Routing
 
 1. https://www.researchgate.net/publication/392628510_A_real-time_image_dehazing_algorithm_based_on_adaptive_routing
 2. 
+
+
+Date: 23-09-2026
+Ligth weight:
+1. https://ieeexplore.ieee.org/document/10152843
+2. https://link.springer.com/article/10.1007/s00138-026-01828-7
+3. 

@@ -1,0 +1,654 @@
+You are an expert PyTorch computer vision engineer and research-code developer.
+
+I am building a research project on:
+
+"Lightweight Spatially Adaptive Image Dehazing for Real-Time/Edge Deployment"
+
+I need you to CREATE ONLY A JUPYTER NOTEBOOK (.ipynb) containing the complete training pipeline.
+
+IMPORTANT:
+- DO NOT RUN THE NOTEBOOK.
+- DO NOT TRAIN THE MODEL.
+- DO NOT execute any Python code.
+- DO NOT test the code.
+- DO NOT try to access Kaggle paths.
+- Only generate the .ipynb file.
+- The notebook will be executed later by me on Kaggle with a GPU.
+- Make the notebook self-contained and executable when I run it on Kaggle.
+- Do not ask me questions unless something is absolutely impossible to infer.
+
+==================================================
+1. DATASET
+==================================================
+
+I am using the RESIDE-6K dataset.
+
+Kaggle paths:
+
+train_path = "/kaggle/input/datasets/kmljts/reside-6k/RESIDE-6K/train"
+test_path  = "/kaggle/input/datasets/kmljts/reside-6k/RESIDE-6K/test"
+
+Directory structure:
+
+train/
+    GT/
+    hazy/
+
+test/
+    GT/
+    hazy/
+
+The following paired dataset/loading implementation is already working correctly.
+USE THIS IMPLEMENTATION AS THE BASIS OF THE DATA PIPELINE.
+
+[INSERT MY EXISTING PairedTransform AND RESIDEDataset CODE HERE]
+
+Use:
+
+train_loader = DataLoader(
+    train_dataset,
+    batch_size=16,
+    shuffle=True,
+    num_workers=2,
+    pin_memory=True
+)
+
+test_loader = DataLoader(
+    test_dataset,
+    batch_size=16,
+    shuffle=False,
+    num_workers=2,
+    pin_memory=True
+)
+
+Do not unnecessarily redesign or change the dataset loader.
+
+The images should remain RGB and be converted to tensors in [0,1].
+
+Training:
+- Resize to 286x286
+- Synchronized random 256x256 crop
+- Synchronized horizontal flip
+
+Testing:
+- Resize to 256x256
+
+==================================================
+2. REQUIRED MODEL ARCHITECTURE
+==================================================
+
+Implement a LIGHTWEIGHT SPATIAL-ADAPTIVE ENCODER-DECODER.
+
+The objective is NOT to build a huge high-accuracy model.
+
+The model should target:
+
+- Low parameter count
+- Low FLOPs
+- Good PSNR/SSIM
+- Spatially adaptive feature extraction
+- Good restoration of non-uniform haze
+- Potential future edge/real-time deployment
+
+Input:
+    B × 3 × 256 × 256
+
+Output:
+    B × 3 × 256 × 256
+
+The architecture must be approximately:
+
+Input
+  ↓
+Input Projection
+  ↓
+Encoder Stage 1
+  ↓
+Downsample
+  ↓
+Encoder Stage 2
+  ↓
+Downsample
+  ↓
+Encoder Stage 3
+  ↓
+Multi-scale Bottleneck
+  ↓
+Decoder Stage 3
+  ↓
+Upsample + Skip Connection
+  ↓
+Decoder Stage 2
+  ↓
+Upsample + Skip Connection
+  ↓
+Decoder Stage 1
+  ↓
+Output Projection
+  ↓
+Haze-free image
+
+Use approximately these channel dimensions:
+
+3
+→ 32
+→ 64
+→ 96
+→ 64
+→ 32
+→ 3
+
+Do not use excessively large channel dimensions.
+
+==================================================
+3. SPATIAL ADAPTIVE BLOCK
+==================================================
+
+Create a reusable module called:
+
+SpatialAdaptiveBlock
+
+The block should be lightweight and should contain:
+
+1. Depthwise convolution
+2. Pointwise 1x1 convolution
+3. Spatial feature gating/attention
+4. Residual connection
+5. Normalization if beneficial
+
+The goal is to allow the network to adapt its feature processing according to spatially varying haze.
+
+Avoid expensive standard convolutions wherever depthwise-separable convolution can be used.
+
+A reasonable design is:
+
+Input
+ ↓
+Depthwise 3x3 convolution
+ ↓
+Pointwise 1x1 convolution
+ ↓
+Activation
+ ↓
+Spatial attention/gating
+ ↓
+Pointwise projection
+ ↓
+Residual addition
+
+Keep the implementation clean and modular.
+
+==================================================
+4. MULTI-SCALE BOTTLENECK
+==================================================
+
+At the bottleneck, implement lightweight multi-scale context extraction.
+
+Use parallel depthwise/dilated convolutions with different receptive fields, for example:
+
+- 3x3 dilation=1
+- 3x3 dilation=2
+- 3x3 dilation=3
+
+Fuse the resulting features using a lightweight 1x1 convolution.
+
+Do NOT use a computationally expensive Transformer.
+
+The purpose is to capture haze patterns at different spatial scales while keeping computational cost low.
+
+==================================================
+5. ENCODER
+==================================================
+
+Implement three encoder stages.
+
+Suggested structure:
+
+Stage 1:
+    32 channels
+    2 × SpatialAdaptiveBlock
+
+Stage 2:
+    64 channels
+    2 × SpatialAdaptiveBlock
+
+Stage 3:
+    96 channels
+    2 × SpatialAdaptiveBlock
+
+Use lightweight downsampling between stages.
+
+Store encoder outputs for skip connections.
+
+==================================================
+6. DECODER
+==================================================
+
+Implement three decoder stages.
+
+Use lightweight upsampling.
+
+Prefer:
+
+bilinear interpolation + 1x1 convolution
+
+instead of unnecessarily expensive transposed convolutions.
+
+Use skip connections from the encoder.
+
+Suggested channels:
+
+96 → 64 → 32
+
+Each decoder stage should contain SpatialAdaptiveBlock(s).
+
+Make sure tensor dimensions match correctly during concatenation/addition.
+
+Prefer efficient feature fusion instead of allowing the number of channels to grow excessively.
+
+==================================================
+7. OUTPUT
+==================================================
+
+The final layer must produce:
+
+3-channel RGB output.
+
+Use an appropriate output activation such as:
+
+Sigmoid()
+
+so the predicted image remains in [0,1].
+
+The model must preserve:
+
+Input:
+    [B,3,256,256]
+
+Output:
+    [B,3,256,256]
+
+==================================================
+8. RESIDUAL LEARNING
+==================================================
+
+Consider using global residual learning:
+
+output = sigmoid(predicted_residual + input)
+
+if this is stable and appropriate for the architecture.
+
+However, ensure the output remains within [0,1].
+
+The implementation should clearly document the chosen strategy.
+
+==================================================
+9. LOSS FUNCTION
+==================================================
+
+Use a restoration-oriented loss.
+
+Preferred:
+
+Charbonnier/L1 loss + SSIM loss
+
+For example:
+
+Loss =
+    0.8 × Charbonnier/L1
+    +
+    0.2 × (1 - SSIM)
+
+Implement SSIM in PyTorch without requiring unnecessary external packages.
+
+The loss should compare:
+
+predicted dehazed image
+
+against
+
+ground-truth clean image.
+
+Keep the loss implementation numerically stable.
+
+==================================================
+10. OPTIMIZER
+==================================================
+
+Use AdamW.
+
+Recommended initial configuration:
+
+optimizer = AdamW(
+    model.parameters(),
+    lr=2e-4,
+    weight_decay=1e-4
+)
+
+Use a learning-rate scheduler.
+
+Prefer:
+
+CosineAnnealingLR
+
+with the number of epochs configured through a single variable.
+
+Make the learning rate easy to modify.
+
+Example:
+
+NUM_EPOCHS = 50
+
+Do not hard-code the epoch count throughout the notebook.
+
+==================================================
+11. MIXED PRECISION
+==================================================
+
+The notebook will run on a Kaggle NVIDIA GPU.
+
+Use PyTorch mixed precision training:
+
+torch.cuda.amp / torch.amp
+
+where appropriate.
+
+Use:
+
+- autocast
+- GradScaler
+
+to reduce GPU memory usage and improve training speed.
+
+Make the implementation compatible with current PyTorch versions.
+
+==================================================
+12. CHECKPOINTING
+==================================================
+
+THIS IS VERY IMPORTANT.
+
+Implement robust checkpointing.
+
+Create:
+
+CHECKPOINT_DIR = "/kaggle/working/checkpoints"
+
+Save:
+
+1. latest checkpoint after every epoch
+2. best checkpoint whenever validation PSNR improves
+
+The checkpoint must contain:
+
+- epoch
+- model_state_dict
+- optimizer_state_dict
+- scheduler_state_dict
+- scaler_state_dict
+- best_psnr
+- training_loss
+- validation_loss
+- validation_psnr
+- validation_ssim
+
+Use filenames:
+
+latest.pth
+best_model.pth
+
+Also save epoch-specific checkpoints if reasonable, but do not create hundreds of huge files unnecessarily.
+
+Implement a RESUME_TRAINING option:
+
+RESUME_TRAINING = True
+
+If latest.pth exists and RESUME_TRAINING is True:
+
+- load the checkpoint
+- restore model
+- restore optimizer
+- restore scheduler
+- restore AMP scaler
+- restore epoch
+- restore best PSNR
+- continue training from the correct epoch
+
+If no checkpoint exists, start from epoch 0.
+
+Make checkpoint loading robust.
+
+==================================================
+13. VALIDATION
+==================================================
+
+After every epoch:
+
+1. Run validation on test_loader.
+2. Calculate average validation loss.
+3. Calculate PSNR.
+4. Calculate SSIM.
+5. Print the results.
+6. Save latest checkpoint.
+7. Save best_model.pth if PSNR improves.
+
+Do NOT calculate metrics incorrectly by averaging image-wise values without clearly defining the method.
+
+Implement PSNR for images in [0,1].
+
+Implement SSIM for RGB images.
+
+==================================================
+14. TRAINING LOGGING
+==================================================
+
+For every epoch print something similar to:
+
+Epoch [1/50]
+Train Loss: 0.xxxx
+Val Loss: 0.xxxx
+PSNR: xx.xx dB
+SSIM: 0.xxxx
+LR: x.xxxxx
+Time: xx.xx min
+
+Track:
+
+train_losses
+val_losses
+psnr_history
+ssim_history
+lr_history
+
+After training, create plots for:
+
+1. Training vs validation loss
+2. PSNR vs epoch
+3. SSIM vs epoch
+4. Learning rate vs epoch
+
+==================================================
+15. MODEL COMPLEXITY
+==================================================
+
+Before training, provide functions to calculate:
+
+- Total parameters
+- Trainable parameters
+- Approximate FLOPs if a reliable lightweight method/library is available
+
+Also print the model architecture.
+
+Target the model toward approximately sub-million to low-million parameters if possible.
+
+DO NOT make the model unnecessarily large just to improve PSNR.
+
+The research objective is:
+
+quality + efficiency
+
+not quality alone.
+
+==================================================
+16. SANITY CHECK BEFORE TRAINING
+==================================================
+
+Include a cell that performs ONLY a model/data shape sanity check.
+
+For example:
+
+- load one batch
+- run one forward pass
+- print input shape
+- print output shape
+- print output range
+- print number of parameters
+
+This cell should NOT train the model or update weights.
+
+Expected:
+
+Input:
+    [B, 3, 256, 256]
+
+Output:
+    [B, 3, 256, 256]
+
+==================================================
+17. VISUALIZATION
+==================================================
+
+Create a validation visualization function.
+
+Display:
+
+Hazy Input | Predicted Dehazed | Ground Truth
+
+for several test images.
+
+Use matplotlib.
+
+The visualization should be executed only when I run the notebook.
+
+Do not execute it while generating the notebook.
+
+==================================================
+18. FINAL MODEL SAVING
+==================================================
+
+At the end of training:
+
+- save best_model.pth
+- optionally save final_model.pth
+- print the location of the saved models
+
+The best model should be selected based on validation PSNR.
+
+==================================================
+19. NOTEBOOK STRUCTURE
+==================================================
+
+Organize the generated .ipynb into clean sections:
+
+1. Imports
+2. Configuration
+3. Dataset and PairedTransform
+4. DataLoaders
+5. Model Components
+6. Spatial Adaptive Block
+7. Multi-Scale Bottleneck
+8. Encoder
+9. Decoder
+10. Complete Dehazing Model
+11. Loss Functions
+12. PSNR / SSIM Metrics
+13. Optimizer and Scheduler
+14. Checkpoint Utilities
+15. Model Complexity
+16. Sanity Check
+17. Training Loop
+18. Validation
+19. Training Curves
+20. Visualization
+21. Final Model Saving
+
+Use Markdown cells to explain each major component briefly.
+
+==================================================
+20. CODE QUALITY REQUIREMENTS
+==================================================
+
+Write research-quality PyTorch code.
+
+Requirements:
+
+- Clean class structure
+- Reusable modules
+- No duplicated code
+- Clear variable names
+- Comments only where useful
+- Device handling:
+      cuda if available, otherwise cpu
+- torch.backends.cudnn.benchmark = True when appropriate
+- Use non_blocking=True when transferring batches if pin_memory is enabled
+- Proper model.train() and model.eval()
+- torch.no_grad() during validation
+- Correct gradient zeroing
+- Correct AMP handling
+- Correct checkpoint restoration
+- Correct scheduler stepping
+- Reproducibility through random seeds
+
+Do not introduce unnecessary dependencies.
+
+Prefer PyTorch, torchvision, PIL, numpy, matplotlib and standard Python libraries.
+
+==================================================
+21. IMPORTANT RESEARCH CONSTRAINT
+==================================================
+
+This is a research project focused on:
+
+"Lightweight Spatially Adaptive Image Dehazing"
+
+Therefore, do NOT simply implement a generic heavy U-Net.
+
+The architecture must demonstrate these research ideas:
+
+1. Lightweight feature extraction
+2. Spatial adaptation
+3. Multi-scale receptive fields
+4. Efficient encoder-decoder processing
+5. Skip connections for detail preservation
+6. Low parameter/FLOP design
+7. Real-time/edge deployment potential
+
+Keep the architecture simple enough that I can later explain every component in a research paper.
+
+==================================================
+22. FINAL REQUIREMENT
+==================================================
+
+GENERATE ONLY THE .IPYNB FILE.
+
+DO NOT RUN IT.
+
+DO NOT TRAIN THE MODEL.
+
+DO NOT execute the dataset loader.
+
+DO NOT execute a forward pass.
+
+DO NOT estimate actual training results.
+
+Do not claim that the code works based on execution.
+
+After creating the notebook, provide only a short summary of:
+
+- notebook filename
+- architecture used
+- optimizer
+- loss
+- checkpoint strategy
+
+The notebook itself should contain the complete implementation.
